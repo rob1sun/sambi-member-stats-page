@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <title>Sambi Watchdog - Arbetskö</title>
+  <style>
+    :root { 
+      --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0; 
+      --text-main: #0f172a; --text-muted: #64748b; 
+      --critical: #ef4444; --warning: #f59e0b; --success: #10b981;
+    }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 40px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+    h1 { margin: 0; font-size: 24px; font-weight: 600; }
+    .counter { font-size: 14px; background: var(--text-main); color: #fff; padding: 4px 12px; border-radius: 999px; font-weight: 600; }
+    
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    th, td { padding: 16px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; }
+    th { background: #f1f5f9; font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; }
+    
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .badge.critical { background: #fee2e2; color: var(--critical); border: 1px solid #fca5a5; }
+    .badge.warning { background: #fef3c7; color: var(--warning); border: 1px solid #fcd34d; }
+    
+    .code-block { background: #f1f5f9; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: var(--text-muted); border: 1px solid var(--border); }
+    .diff { display: flex; flex-direction: column; gap: 4px; }
+    .diff-old { color: var(--text-muted); text-decoration: line-through; font-size: 12px; }
+    .diff-new { font-weight: 600; }
+    
+    button { background: var(--surface); border: 1px solid var(--border); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: 0.2s; }
+    button:hover { background: #f1f5f9; border-color: var(--text-muted); }
+    button.resolved { background: #ecfdf5; color: var(--success); border-color: #a7f3d0; cursor: default; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>Granskningskö: Bolags- och SCB-uppdateringar</h1>
+    <div class="counter" id="task-counter">Laddar...</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Nivå</th>
+        <th>Upptäckt</th>
+        <th>Organisation (Orgnr)</th>
+        <th>EntityID</th>
+        <th>Förändring</th>
+        <th>Åtgärd</th>
+      </tr>
+    </thead>
+    <tbody id="alert-list">
+      <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Laddar arbetskö...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  // ==========================================
+  // BYT UT MOT DIN WATCHDOG-WORKER URL
+  // ==========================================
+  const API_BASE_URL = "https://BYT_UT_MOT_DIN_WATCHDOG_URL";
+
+  async function loadAlerts() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/alerts`);
+      const alerts = await res.json();
+      
+      document.getElementById('task-counter').innerText = `${alerts.length} ärenden väntar`;
+      
+      if (alerts.length === 0) {
+        document.getElementById('alert-list').innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">🎉 Inga väntande ärenden! Allt är uppdaterat.</td></tr>`;
+        return;
+      }
+
+      document.getElementById('alert-list').innerHTML = alerts.map(alert => {
+        const date = new Date(alert.detected_at).toLocaleDateString('sv-SE', { year: 'numeric', month: 'short', day: 'numeric' });
+        const levelBadge = alert.alert_type === 'CRITICAL' 
+          ? `<span class="badge critical">Kritisk</span>` 
+          : `<span class="badge warning">Varning</span>`;
+
+        return `
+          <tr id="row-${alert.id}">
+            <td>${levelBadge}</td>
+            <td style="color: var(--text-muted);">${date}</td>
+            <td><strong>${alert.org_number}</strong></td>
+            <td><span class="code-block">${alert.entity_id}</span></td>
+            <td>
+              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 2px;">${alert.field_changed}</div>
+              <div class="diff">
+                <span class="diff-old">${alert.old_value || 'Saknades'}</span>
+                <span class="diff-new">${alert.new_value}</span>
+              </div>
+            </td>
+            <td>
+              <button onclick="resolveAlert(${alert.id})" id="btn-${alert.id}">Bocka av</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } catch (e) {
+      document.getElementById('alert-list').innerHTML = `<tr><td colspan="6" style="color: red;">Kunde inte ladda data. Har du angett rätt API_BASE_URL?</td></tr>`;
+    }
+  }
+
+  async function resolveAlert(id) {
+    const btn = document.getElementById(`btn-${id}`);
+    btn.innerText = "Sparar...";
+    btn.disabled = true;
+
+    try {
+      await fetch(`${API_BASE_URL}/api/alerts/${id}/resolve`, { method: 'POST' });
+      const row = document.getElementById(`row-${id}`);
+      
+      // Animera bort raden snyggt
+      row.style.opacity = '0.5';
+      btn.innerText = "✔ Klart";
+      btn.className = "resolved";
+      
+      // Ladda om listan efter en kort stund för att uppdatera räknaren
+      setTimeout(loadAlerts, 1500);
+    } catch (e) {
+      alert("Något gick fel vid sparning.");
+      btn.innerText = "Försök igen";
+      btn.disabled = false;
+    }
+  }
+
+  if(API_BASE_URL !== "https://BYT_UT_MOT_DIN_WATCHDOG_URL") {
+    loadAlerts();
+  }
+</script>
+</body>
+</html>
