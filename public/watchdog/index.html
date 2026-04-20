@@ -1,35 +1,4 @@
 <!DOCTYPE html>
-<!--
-/**
- * ===================================================================
- * PAGES: 3.11 sambi-member-stats-page/watchdog (Klient-frontend)
- * VERSION: AS-IS-ANALYS 20260420_2037
- * SYFTE: Agerar webbgränssnitt för att visa en granskningskö av larm och låta användaren markera larm som åtgärdade via anrop till Watchdog-API:et.
- * ===================================================================
- * * --- KONTRAKT & BEROENDEN ---
- * TRIGGERS: HTTP (Webbläsare)
- * BINDINGS: [Inga - ren klientkod]
- * ENV_VARS_PUBLIC: [Inga. Konfigurationen (API_BASE_URL) är hårdkodad i script-blocket]
- * SECRETS: [Saknas i koden]
- * EXTERNA API:er: 
- * - GET https://sambi-watchdog.rob1sun9764.workers.dev/api/alerts
- * - POST https://sambi-watchdog.rob1sun9764.workers.dev/api/alerts/{id}/resolve
- * INPUT/OUTPUT: 
- * - Input: Förväntar sig en JSON-array med larm-objekt (id, alert_type, org_number, entity_id, field_changed, old_value, new_value).
- * - Output: Skickar asynkrona POST-requests för att ändra tillstånd i backend.
- * * --- FAKTISK LOGIK (AS-IS) ---
- * AFFÄRSREGLER:
- * - [Filter: Inga filter för personnummer/en-nummer existerar i denna kod. Koden renderar blint det backend skickar.]
- * - [Logik: Om alert_type är 'CRITICAL' renderas en röd badge, annars en gul badge ('Varning').]
- * - [Loggning: Finns console.log/error för övervakning? NEJ. Koden sväljer felobjekt vid catch.]
- * SIDOEFFEKTER:
- * - Mutera DOM (uppdaterar gränssnitt) baserat på API-svar. 
- * - Mutera state i Watchdog-backend via POST /resolve.
- * BEGRÄNSNINGAR / THROTTLING:
- * - [Rate limiting saknas för API-anrop. En debounce/sleep på 1500ms (setTimeout) finns innan listan laddas om efter en åtgärd för att förhindra omedelbar omladdning, och knappen "disabled" sätts till true under pågående anrop.]
- * ===================================================================
- */
--->
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
@@ -91,13 +60,37 @@
 
 <script>
   // ==========================================
-  // BYT UT MOT DIN WATCHDOG-WORKER URL
+  // Använder den lokala domänen för proxyn
   // ==========================================
-  const API_BASE_URL = "https://sambi-watchdog.rob1sun9764.workers.dev";
+  const API_BASE_URL = "";
+
+  // Defense in depth: Maskera org-nummer om de ser ut som personnummer
+  function maskIfPersonalNumber(orgNr) {
+    if (!orgNr) return "Saknas";
+    const digits = orgNr.replace(/\D/g, '');
+    
+    let thirdDigit = null;
+    if (digits.length === 10) {
+      thirdDigit = digits.charAt(2);
+    } else if (digits.length === 12) {
+      thirdDigit = digits.charAt(4);
+    }
+
+    if (thirdDigit === '0' || thirdDigit === '1') {
+      return "*** MASKERAD ***";
+    }
+    
+    return orgNr;
+  }
 
   async function loadAlerts() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/alerts`);
+      
+      if (!res.ok) {
+        throw new Error(`Nätverksfel: ${res.status} ${res.statusText}`);
+      }
+
       const alerts = await res.json();
       
       document.getElementById('task-counter').innerText = `${alerts.length} ärenden väntar`;
@@ -112,12 +105,14 @@
         const levelBadge = alert.alert_type === 'CRITICAL' 
           ? `<span class="badge critical">Kritisk</span>` 
           : `<span class="badge warning">Varning</span>`;
+          
+        const safeOrgNumber = maskIfPersonalNumber(alert.org_number);
 
         return `
           <tr id="row-${alert.id}">
             <td>${levelBadge}</td>
             <td style="color: var(--text-muted);">${date}</td>
-            <td><strong>${alert.org_number}</strong></td>
+            <td><strong>${safeOrgNumber}</strong></td>
             <td><span class="code-block">${alert.entity_id}</span></td>
             <td>
               <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 2px;">${alert.field_changed}</div>
@@ -133,7 +128,8 @@
         `;
       }).join('');
     } catch (e) {
-      document.getElementById('alert-list').innerHTML = `<tr><td colspan="6" style="color: red;">Kunde inte ladda data. Har du angett rätt API_BASE_URL?</td></tr>`;
+      console.error("Fel vid anrop till lokala proxyn (/api/alerts):", e);
+      document.getElementById('alert-list').innerHTML = `<tr><td colspan="6" style="color: red; text-align: center;">Kunde inte ladda data via proxyn. Kontrollera konsolen för detaljer.</td></tr>`;
     }
   }
 
@@ -143,7 +139,12 @@
     btn.disabled = true;
 
     try {
-      await fetch(`${API_BASE_URL}/api/alerts/${id}/resolve`, { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/api/alerts/${id}/resolve`, { method: 'POST' });
+      
+      if (!res.ok) {
+        throw new Error(`Nätverksfel vid sparande: ${res.status}`);
+      }
+
       const row = document.getElementById(`row-${id}`);
       
       // Animera bort raden snyggt
@@ -154,15 +155,15 @@
       // Ladda om listan efter en kort stund för att uppdatera räknaren
       setTimeout(loadAlerts, 1500);
     } catch (e) {
-      alert("Något gick fel vid sparning.");
+      console.error(`Fel vid anrop till lokala proxyn (/api/alerts/${id}/resolve):`, e);
+      alert("Något gick fel vid sparning. Kontrollera nätverket eller konsolen.");
       btn.innerText = "Försök igen";
       btn.disabled = false;
     }
   }
 
-  if(API_BASE_URL !== "https://BYT_UT_MOT_DIN_WATCHDOG_URL") {
-    loadAlerts();
-  }
+  // Ladda data automatiskt
+  loadAlerts();
 </script>
 </body>
 </html>
