@@ -1,4 +1,33 @@
 <!DOCTYPE html>
+
+<!--
+/**
+ * ===================================================================
+ * WORKER: 3.10 sambi-member-stats-page
+ * VERSION: AS-IS-ANALYS 20260420_1919
+ * SYFTE: Agerar statisk publik webbapp (frontend/dashboard) som renderar HTML och gör klientsides-anrop (fetch) mot ett externt API för att visualisera statistik och en filtrerbar lista över organisationer.
+ * ===================================================================
+ * * --- KONTRAKT & BEROENDEN ---
+ * TRIGGERS: HTTP (Körs lokalt i användarens webbläsare vid sidladdning).
+ * BINDINGS: Inga explicita (detta är ren klient-kod, ingen backend-binding för KV/D1 etc).
+ * ENV_VARS_PUBLIC: Inga formella env-variabler via wrangler. `API_BASE_URL` är dock hårdkodad som en konstant i JavaScript-blocket.
+ * SECRETS: Inga (Koden är 100% publik och exponerad i klartext för användaren).
+ * EXTERNA API:er: Gör webbläsar-anrop via `fetch()` mot två endpoints:
+ * - `https://sambi-json-for-web-stats.rob1sun9764.workers.dev/api/statistik`
+ * - `https://sambi-json-for-web-stats.rob1sun9764.workers.dev/api/organisationer`
+ * INPUT/OUTPUT: Ingen inkommande backend-input. Output är rendering av DOM baserat på en förväntad JSON-struktur (huvudmatrik, juridisk_form, metadata.filter, och arrayen organisationer).
+ * * --- FAKTISK LOGIK (AS-IS) ---
+ * AFFÄRSREGLER:
+ * - Filter: Filtreringen i koden (`update()`) är enbart en visuell hantering av redan nedladdad data. Inga faktiska affärsregler för att dölja personnummer, is_sob eller en-nummer existerar i denna fil.
+ * - Loggning: Saknas helt. Koden använder inte `console.log` eller `console.error` någonstans.
+ * SIDOEFFEKTER:
+ * - Skriver över webbläsarens DOM (injicerar tabellrader och stat-kort). Ingen beständig data ändras eller lagras på klienten.
+ * BEGRÄNSNINGAR / THROTTLING:
+ * - Saknas helt. Klienten laddar hela listan av organisationer i en stöt vid sidladdning och sparar i minnet (`allOrgs`). Ingen rate-limiting mot det externa API:et eller paginering för tabellen finns implementerad.
+ * ===================================================================
+ */
+-->
+
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
