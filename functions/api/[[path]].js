@@ -8,7 +8,7 @@ export async function onRequest({ request, env }) {
 
     // Lägg till den interna API-nyckeln (från miljövariablerna) i headern
     // Detta tillåter autentisering mot backenden utan att nyckeln exponeras i klienten
-    proxiedRequest.headers.set("Authorization", env.INTERNAL_API_KEY);
+    proxiedRequest.headers.set("Authorization", env.ADMIN_KEY);
 
     // Routa anropet direkt till Watchdog-backenden via Service Binding
     // Notera: WATCHDOG_WORKER är namnet på bindingen i inställningarna
