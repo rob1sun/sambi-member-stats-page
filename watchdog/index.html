@@ -1,4 +1,35 @@
 <!DOCTYPE html>
+<!--
+/**
+ * ===================================================================
+ * PAGES: 3.11 sambi-member-stats-page/watchdog (Klient-frontend)
+ * VERSION: AS-IS-ANALYS 20260420_2037
+ * SYFTE: Agerar webbgränssnitt för att visa en granskningskö av larm och låta användaren markera larm som åtgärdade via anrop till Watchdog-API:et.
+ * ===================================================================
+ * * --- KONTRAKT & BEROENDEN ---
+ * TRIGGERS: HTTP (Webbläsare)
+ * BINDINGS: [Inga - ren klientkod]
+ * ENV_VARS_PUBLIC: [Inga. Konfigurationen (API_BASE_URL) är hårdkodad i script-blocket]
+ * SECRETS: [Saknas i koden]
+ * EXTERNA API:er: 
+ * - GET https://sambi-watchdog.rob1sun9764.workers.dev/api/alerts
+ * - POST https://sambi-watchdog.rob1sun9764.workers.dev/api/alerts/{id}/resolve
+ * INPUT/OUTPUT: 
+ * - Input: Förväntar sig en JSON-array med larm-objekt (id, alert_type, org_number, entity_id, field_changed, old_value, new_value).
+ * - Output: Skickar asynkrona POST-requests för att ändra tillstånd i backend.
+ * * --- FAKTISK LOGIK (AS-IS) ---
+ * AFFÄRSREGLER:
+ * - [Filter: Inga filter för personnummer/en-nummer existerar i denna kod. Koden renderar blint det backend skickar.]
+ * - [Logik: Om alert_type är 'CRITICAL' renderas en röd badge, annars en gul badge ('Varning').]
+ * - [Loggning: Finns console.log/error för övervakning? NEJ. Koden sväljer felobjekt vid catch.]
+ * SIDOEFFEKTER:
+ * - Mutera DOM (uppdaterar gränssnitt) baserat på API-svar. 
+ * - Mutera state i Watchdog-backend via POST /resolve.
+ * BEGRÄNSNINGAR / THROTTLING:
+ * - [Rate limiting saknas för API-anrop. En debounce/sleep på 1500ms (setTimeout) finns innan listan laddas om efter en åtgärd för att förhindra omedelbar omladdning, och knappen "disabled" sätts till true under pågående anrop.]
+ * ===================================================================
+ */
+-->
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
