@@ -1,4 +1,35 @@
 <!DOCTYPE html>
+<!--
+/**
+ * ===================================================================
+ * PAGES: 3.11 sambi-member-stats-page/watchdog
+ * VERSION: TO-BE 20260420_2153
+ * SYFTE: Webbaserat internt GUI för att granska och bocka av larm. 
+ * Använder en Pages Function som osynlig proxy för att kommunicera 
+ * säkert med Watchdog-backenden (3.5) utan att exponera nycklar i frontenden.
+ * ===================================================================
+ * * --- KONTRAKT & BEROENDEN ---
+ * TRIGGERS: HTTP (Webbläsare anropar Pages Function)
+ * BINDINGS: env.WATCHDOG_WORKER (Service Binding till 3.5)
+ * ENV_VARS_PUBLIC: Inga
+ * SECRETS: env.ADMIN_KEY (Används av proxyn för att autentisera mot 3.5)
+ * EXTERNA API:er: Inga (Gör enbart lokala anrop till /api/alerts som routas internt)
+ * INPUT/OUTPUT: 
+ * - Input (Frontend): Tar emot JSON från proxyn och ritar DOM.
+ * - Output (Proxy): Skickar vidare GET och POST till Watchdog via Service Binding.
+ * * --- FAKTISK LOGIK (TO-BE) ---
+ * AFFÄRSREGLER:
+ * - [Säkerhet]: Cloudflare Access skyddar HTML-vyn. Pages Function injicerar ADMIN_KEY. Frontenden är helt "nyckelfri".
+ * - [Filter - Defense in Depth]: Frontend-JS blockerar rendering av orgnummer där 3:e siffran är 0/1 (personnummer).
+ * - [Loggning]: Tydlig felhantering i webbläsarens konsol vid nätverksfel eller felaktiga proxy-svar.
+ * SIDOEFFEKTER:
+ * - Mutera DOM (uppdaterar gränssnitt) baserat på API-svar.
+ * - Mutera state (resolvar larm) i Watchdog-backend via proxyns POST-anrop.
+ * BEGRÄNSNINGAR / THROTTLING:
+ * - [Klient]: Knappar (disabled) avaktiveras vid klick. 1500ms delay vid omladdning.
+ * ===================================================================
+ */
+-->
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
