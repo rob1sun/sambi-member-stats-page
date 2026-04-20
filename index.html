@@ -1,33 +1,5 @@
 <!DOCTYPE html>
 
-<!--
-/**
- * ===================================================================
- * WORKER: 3.10 sambi-member-stats-page
- * VERSION: AS-IS-ANALYS 20260420_1919
- * SYFTE: Agerar statisk publik webbapp (frontend/dashboard) som renderar HTML och gör klientsides-anrop (fetch) mot ett externt API för att visualisera statistik och en filtrerbar lista över organisationer.
- * ===================================================================
- * * --- KONTRAKT & BEROENDEN ---
- * TRIGGERS: HTTP (Körs lokalt i användarens webbläsare vid sidladdning).
- * BINDINGS: Inga explicita (detta är ren klient-kod, ingen backend-binding för KV/D1 etc).
- * ENV_VARS_PUBLIC: Inga formella env-variabler via wrangler. `API_BASE_URL` är dock hårdkodad som en konstant i JavaScript-blocket.
- * SECRETS: Inga (Koden är 100% publik och exponerad i klartext för användaren).
- * EXTERNA API:er: Gör webbläsar-anrop via `fetch()` mot två endpoints:
- * - `https://sambi-json-for-web-stats.rob1sun9764.workers.dev/api/statistik`
- * - `https://sambi-json-for-web-stats.rob1sun9764.workers.dev/api/organisationer`
- * INPUT/OUTPUT: Ingen inkommande backend-input. Output är rendering av DOM baserat på en förväntad JSON-struktur (huvudmatrik, juridisk_form, metadata.filter, och arrayen organisationer).
- * * --- FAKTISK LOGIK (AS-IS) ---
- * AFFÄRSREGLER:
- * - Filter: Filtreringen i koden (`update()`) är enbart en visuell hantering av redan nedladdad data. Inga faktiska affärsregler för att dölja personnummer, is_sob eller en-nummer existerar i denna fil.
- * - Loggning: Saknas helt. Koden använder inte `console.log` eller `console.error` någonstans.
- * SIDOEFFEKTER:
- * - Skriver över webbläsarens DOM (injicerar tabellrader och stat-kort). Ingen beständig data ändras eller lagras på klienten.
- * BEGRÄNSNINGAR / THROTTLING:
- * - Saknas helt. Klienten laddar hela listan av organisationer i en stöt vid sidladdning och sparar i minnet (`allOrgs`). Ingen rate-limiting mot det externa API:et eller paginering för tabellen finns implementerad.
- * ===================================================================
- */
--->
-
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
@@ -204,12 +176,14 @@
 </div>
 
 <script>
+  // Version: 20260420_1942
   // ==========================================
   // BYT UT MOT DIN CLOUDFLARE WORKER URL
   // ==========================================
   const API_BASE_URL = "https://sambi-json-for-web-stats.rob1sun9764.workers.dev";
 
   let allOrgs = [];
+  let searchDebounceTimer;
 
   // Översättningslexikon för snyggare presentation i tabellen
   const labels = {
@@ -261,6 +235,7 @@
 
       update();
     } catch (e) {
+      console.error("[Sambi Dashboard] API Fetch misslyckades:", e);
       document.getElementById('stats-container').innerHTML = `<p style="color:#ef4444; padding:24px;">Ett fel uppstod: ${e.message}<br><br>Har du satt in rätt API_BASE_URL i koden?</p>`;
       document.getElementById('org-list').innerHTML = `<tr><td colspan="4" style="color:#ef4444;">Ett fel uppstod vid inläsning av data.</td></tr>`;
     }
@@ -295,12 +270,19 @@
     `;
   }
 
+  function handleSearchInput() {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      update();
+    }, 250);
+  }
+
   function renderFilters(filters) {
     let html = `
       <div class="controls">
         <div class="control-group">
           <label>Fritextsök</label>
-          <input type="text" id="search" placeholder="Sök på namn..." oninput="update()">
+          <input type="text" id="search" placeholder="Sök på namn..." oninput="handleSearchInput()">
         </div>
     `;
 
@@ -327,13 +309,22 @@
     const fLan = document.getElementById('f-lan').value;
     const fKom = document.getElementById('f-kommun').value;
 
-    const filtered = allOrgs.filter(o =>
-      o.namn.toLowerCase().includes(s) &&
-      (!fAns || o.anslutningsform.includes(fAns)) &&
-      (!fJur || o.juridisk_form === fJur) &&
-      (!fLan || o.lan === fLan) &&
-      (!fKom || o.kommun === fKom)
-    );
+    const filtered = allOrgs.filter(o => {
+      if (o.orgnr) {
+        const orgnrStr = String(o.orgnr);
+        if ((orgnrStr.length === 10 && (orgnrStr[2] === '0' || orgnrStr[2] === '1')) ||
+            (orgnrStr.length === 12 && (orgnrStr[4] === '0' || orgnrStr[4] === '1'))) {
+          console.warn("Blockerade rendering av misstänkt personnummer i frontend:", o.orgnr);
+          return false;
+        }
+      }
+
+      return o.namn.toLowerCase().includes(s) &&
+             (!fAns || o.anslutningsform.includes(fAns)) &&
+             (!fJur || o.juridisk_form === fJur) &&
+             (!fLan || o.lan === fLan) &&
+             (!fKom || o.kommun === fKom);
+    });
 
     document.getElementById('counter-display').textContent = `${filtered.length} organisationer visas`;
     renderTable(filtered);
