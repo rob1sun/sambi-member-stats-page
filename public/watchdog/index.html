@@ -1,9 +1,8 @@
-<!DOCTYPE html>
 <!--
 /**
  * ===================================================================
  * PAGES: 3.11 sambi-member-stats-page/watchdog
- * VERSION: TO-BE 20260420_2153
+ * VERSION: TO-BE 20260421_1629
  * SYFTE: Webbaserat internt GUI för att granska och bocka av larm. 
  * Använder en Pages Function som osynlig proxy för att kommunicera 
  * säkert med Watchdog-backenden (3.5) utan att exponera nycklar i frontenden.
@@ -19,6 +18,7 @@
  * - Output (Proxy): Skickar vidare GET och POST till Watchdog via Service Binding.
  * * --- FAKTISK LOGIK (TO-BE) ---
  * AFFÄRSREGLER:
+ * - [Klient]: Gränssnittet är uppdelat i 'Nya larm' och 'Bevakningar'. Användaren kan skicka med kommentarer (notes) och byta status till WATCHING eller RESOLVED.
  * - [Säkerhet]: Cloudflare Access skyddar HTML-vyn. Pages Function injicerar ADMIN_KEY. Frontenden är helt "nyckelfri".
  * - [Filter - Defense in Depth]: Frontend-JS blockerar rendering av orgnummer där 3:e siffran är 0/1 (personnummer).
  * - [Loggning]: Tydlig felhantering i webbläsarens konsol vid nätverksfel eller felaktiga proxy-svar.
@@ -30,6 +30,7 @@
  * ===================================================================
  */
 -->
+<!DOCTYPE html>
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
@@ -39,29 +40,46 @@
       --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0; 
       --text-main: #0f172a; --text-muted: #64748b; 
       --critical: #ef4444; --warning: #f59e0b; --success: #10b981;
+      --watch-bg: #f0fdfa; --watch-border: #ccfbf1; --watch-text: #0f766e;
     }
     body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 40px; }
-    .container { max-width: 1200px; margin: 0 auto; }
+    .container { max-width: 1300px; margin: 0 auto; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
     h1 { margin: 0; font-size: 24px; font-weight: 600; }
+    h2 { font-size: 18px; margin: 32px 0 12px 0; font-weight: 600; color: var(--text-main); }
     .counter { font-size: 14px; background: var(--text-main); color: #fff; padding: 4px 12px; border-radius: 999px; font-weight: 600; }
     
-    table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    th, td { padding: 16px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 24px; }
+    th, td { padding: 16px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: top; }
     th { background: #f1f5f9; font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; }
     
+    .watching-table th { background: var(--watch-border); color: var(--watch-text); }
+    .watching-row { background-color: var(--watch-bg); }
+
     .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
     .badge.critical { background: #fee2e2; color: var(--critical); border: 1px solid #fca5a5; }
     .badge.warning { background: #fef3c7; color: var(--warning); border: 1px solid #fcd34d; }
     
-    .code-block { background: #f1f5f9; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: var(--text-muted); border: 1px solid var(--border); }
+    .code-block { background: #f1f5f9; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: var(--text-muted); border: 1px solid var(--border); word-break: break-all; }
     .diff { display: flex; flex-direction: column; gap: 4px; }
     .diff-old { color: var(--text-muted); text-decoration: line-through; font-size: 12px; }
     .diff-new { font-weight: 600; }
     
-    button { background: var(--surface); border: 1px solid var(--border); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: 0.2s; }
-    button:hover { background: #f1f5f9; border-color: var(--text-muted); }
-    button.resolved { background: #ecfdf5; color: var(--success); border-color: #a7f3d0; cursor: default; }
+    .notes-display { margin-top: 10px; padding: 8px 12px; background: #fef9c3; border-left: 3px solid #facc15; font-size: 13px; color: #854d0e; border-radius: 4px; display: inline-block; }
+
+    .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    input[type="text"] { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; min-width: 220px; outline: none; transition: 0.2s; }
+    input[type="text"]:focus { border-color: var(--text-muted); }
+    
+    button { background: var(--surface); border: 1px solid var(--border); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: 0.2s; font-size: 13px; white-space: nowrap; }
+    button:hover:not(:disabled) { background: #f1f5f9; border-color: var(--text-muted); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .btn-resolve { background: #f8fafc; }
+    .btn-watch { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+    .btn-watch:hover:not(:disabled) { background: #dbeafe; border-color: #93c5fd; }
+    button.resolved { background: #ecfdf5 !important; color: var(--success) !important; border-color: #a7f3d0 !important; cursor: default; }
+    button.watching-status { background: var(--watch-border) !important; color: var(--watch-text) !important; border-color: #99f6e4 !important; cursor: default; }
   </style>
 </head>
 <body>
@@ -72,6 +90,24 @@
     <div class="counter" id="task-counter">Laddar...</div>
   </div>
 
+  <h2>Mina Bevakningar</h2>
+  <table class="watching-table">
+    <thead>
+      <tr>
+        <th>Nivå</th>
+        <th>Upptäckt</th>
+        <th>Organisation (Orgnr)</th>
+        <th>EntityID</th>
+        <th>Förändring</th>
+        <th>Åtgärd</th>
+      </tr>
+    </thead>
+    <tbody id="watching-list">
+      <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Laddar bevakningar...</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Nya Larm</h2>
   <table>
     <thead>
       <tr>
@@ -83,7 +119,7 @@
         <th>Åtgärd</th>
       </tr>
     </thead>
-    <tbody id="alert-list">
+    <tbody id="open-list">
       <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Laddar arbetskö...</td></tr>
     </tbody>
   </table>
@@ -114,6 +150,41 @@
     return orgNr;
   }
 
+  function renderAlertRow(alert, isWatching) {
+    const date = new Date(alert.detected_at).toLocaleDateString('sv-SE', { year: 'numeric', month: 'short', day: 'numeric' });
+    const levelBadge = alert.alert_type === 'CRITICAL' 
+      ? `<span class="badge critical">Kritisk</span>` 
+      : `<span class="badge warning">Varning</span>`;
+      
+    const safeOrgNumber = maskIfPersonalNumber(alert.org_number);
+    const notesHtml = alert.notes ? `<div class="notes-display">📝 ${alert.notes}</div>` : '';
+    const rowClass = isWatching ? 'class="watching-row"' : '';
+
+    return `
+      <tr id="row-${alert.id}" ${rowClass}>
+        <td>${levelBadge}</td>
+        <td style="color: var(--text-muted);">${date}</td>
+        <td><strong>${safeOrgNumber}</strong></td>
+        <td><span class="code-block">${alert.entity_id}</span></td>
+        <td>
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 2px;">${alert.field_changed}</div>
+          <div class="diff">
+            <span class="diff-old">${alert.old_value || 'Saknades'}</span>
+            <span class="diff-new">${alert.new_value}</span>
+          </div>
+          ${notesHtml}
+        </td>
+        <td>
+          <div class="actions">
+            <input type="text" id="input-${alert.id}" placeholder="Kommentar / Ärendenummer" value="${alert.notes || ''}">
+            <button class="btn-watch" onclick="updateAlertStatus(${alert.id}, 'WATCHING')" id="btn-watch-${alert.id}">Bevaka</button>
+            <button class="btn-resolve" onclick="updateAlertStatus(${alert.id}, 'RESOLVED')" id="btn-resolve-${alert.id}">Bocka av</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
   async function loadAlerts() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/alerts`);
@@ -123,73 +194,87 @@
       }
 
       const alerts = await res.json();
+      const openAlerts = alerts.filter(a => a.status === 'OPEN');
+      const watchingAlerts = alerts.filter(a => a.status === 'WATCHING');
       
-      document.getElementById('task-counter').innerText = `${alerts.length} ärenden väntar`;
+      document.getElementById('task-counter').innerText = `${alerts.length} totala ärenden (${openAlerts.length} nya)`;
       
-      if (alerts.length === 0) {
-        document.getElementById('alert-list').innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">🎉 Inga väntande ärenden! Allt är uppdaterat.</td></tr>`;
-        return;
+      // Render Watching Alerts
+      const watchingList = document.getElementById('watching-list');
+      if (watchingAlerts.length === 0) {
+        watchingList.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-muted);">Inga pågående bevakningar.</td></tr>`;
+      } else {
+        watchingList.innerHTML = watchingAlerts.map(a => renderAlertRow(a, true)).join('');
       }
 
-      document.getElementById('alert-list').innerHTML = alerts.map(alert => {
-        const date = new Date(alert.detected_at).toLocaleDateString('sv-SE', { year: 'numeric', month: 'short', day: 'numeric' });
-        const levelBadge = alert.alert_type === 'CRITICAL' 
-          ? `<span class="badge critical">Kritisk</span>` 
-          : `<span class="badge warning">Varning</span>`;
-          
-        const safeOrgNumber = maskIfPersonalNumber(alert.org_number);
+      // Render Open Alerts
+      const openList = document.getElementById('open-list');
+      if (openAlerts.length === 0) {
+        openList.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">🎉 Inga nya ärenden! Allt är hanterat.</td></tr>`;
+      } else {
+        openList.innerHTML = openAlerts.map(a => renderAlertRow(a, false)).join('');
+      }
 
-        return `
-          <tr id="row-${alert.id}">
-            <td>${levelBadge}</td>
-            <td style="color: var(--text-muted);">${date}</td>
-            <td><strong>${safeOrgNumber}</strong></td>
-            <td><span class="code-block">${alert.entity_id}</span></td>
-            <td>
-              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 2px;">${alert.field_changed}</div>
-              <div class="diff">
-                <span class="diff-old">${alert.old_value || 'Saknades'}</span>
-                <span class="diff-new">${alert.new_value}</span>
-              </div>
-            </td>
-            <td>
-              <button onclick="resolveAlert(${alert.id})" id="btn-${alert.id}">Bocka av</button>
-            </td>
-          </tr>
-        `;
-      }).join('');
     } catch (e) {
       console.error("Fel vid anrop till lokala proxyn (/api/alerts):", e);
-      document.getElementById('alert-list').innerHTML = `<tr><td colspan="6" style="color: red; text-align: center;">Kunde inte ladda data via proxyn. Kontrollera konsolen för detaljer.</td></tr>`;
+      document.getElementById('open-list').innerHTML = `<tr><td colspan="6" style="color: red; text-align: center;">Kunde inte ladda data via proxyn. Kontrollera konsolen för detaljer.</td></tr>`;
+      document.getElementById('watching-list').innerHTML = `<tr><td colspan="6" style="color: red; text-align: center;">Kunde inte ladda data via proxyn.</td></tr>`;
     }
   }
 
-  async function resolveAlert(id) {
-    const btn = document.getElementById(`btn-${id}`);
-    btn.innerText = "Sparar...";
-    btn.disabled = true;
+  async function updateAlertStatus(id, newStatus) {
+    const btnWatch = document.getElementById(`btn-watch-${id}`);
+    const btnResolve = document.getElementById(`btn-resolve-${id}`);
+    const inputField = document.getElementById(`input-${id}`);
+    
+    const activeBtn = newStatus === 'WATCHING' ? btnWatch : btnResolve;
+    const notesValue = inputField.value.trim();
+
+    // Disable UI during request
+    btnWatch.disabled = true;
+    btnResolve.disabled = true;
+    inputField.disabled = true;
+    activeBtn.innerText = "Sparar...";
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/alerts/${id}/resolve`, { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/api/alerts/${id}`, { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: newStatus,
+          notes: notesValue
+        })
+      });
       
       if (!res.ok) {
         throw new Error(`Nätverksfel vid sparande: ${res.status}`);
       }
 
       const row = document.getElementById(`row-${id}`);
-      
-      // Animera bort raden snyggt
       row.style.opacity = '0.5';
-      btn.innerText = "✔ Klart";
-      btn.className = "resolved";
       
-      // Ladda om listan efter en kort stund för att uppdatera räknaren
+      if (newStatus === 'RESOLVED') {
+        activeBtn.innerText = "✔ Avbockad";
+        activeBtn.className = "resolved";
+      } else {
+        activeBtn.innerText = "👁 Bevakas";
+        activeBtn.className = "watching-status";
+      }
+      
+      // Ladda om listan efter en kort stund för feedback
       setTimeout(loadAlerts, 1500);
     } catch (e) {
-      console.error(`Fel vid anrop till lokala proxyn (/api/alerts/${id}/resolve):`, e);
+      console.error(`Fel vid anrop till lokala proxyn (/api/alerts/${id}):`, e);
       alert("Något gick fel vid sparning. Kontrollera nätverket eller konsolen.");
-      btn.innerText = "Försök igen";
-      btn.disabled = false;
+      
+      // Restore UI on error
+      btnWatch.disabled = false;
+      btnResolve.disabled = false;
+      inputField.disabled = false;
+      btnWatch.innerText = "Bevaka";
+      btnResolve.innerText = "Bocka av";
     }
   }
 
