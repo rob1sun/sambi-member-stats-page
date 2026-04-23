@@ -1,8 +1,9 @@
 <!--
+// Version: 20260424_0055
 /**
  * ===================================================================
  * PAGES: 3.11 sambi-member-stats-page/watchdog
- * VERSION: TO-BE 20260421_1629
+ * VERSION: TO-BE 20260424_0055
  * SYFTE: Webbaserat internt GUI för att granska och bocka av larm. 
  * Använder en Pages Function som osynlig proxy för att kommunicera 
  * säkert med Watchdog-backenden (3.5) utan att exponera nycklar i frontenden.
@@ -20,7 +21,7 @@
  * AFFÄRSREGLER:
  * - [Klient]: Gränssnittet är uppdelat i 'Nya larm' och 'Bevakningar'. Användaren kan skicka med kommentarer (notes) och byta status till WATCHING eller RESOLVED.
  * - [Säkerhet]: Cloudflare Access skyddar HTML-vyn. Pages Function injicerar ADMIN_KEY. Frontenden är helt "nyckelfri".
- * - [Filter - Defense in Depth]: Frontend-JS blockerar rendering av orgnummer där 3:e siffran är 0/1 (personnummer).
+ * - [Filter - Defense in Depth]: Inmatningsfiltret använder nu strikt Regex för att tillåta utländska format.
  * - [Loggning]: Tydlig felhantering i webbläsarens konsol vid nätverksfel eller felaktiga proxy-svar.
  * SIDOEFFEKTER:
  * - Mutera DOM (uppdaterar gränssnitt) baserat på API-svar.
@@ -134,16 +135,18 @@
   // Defense in depth: Maskera org-nummer om de ser ut som personnummer
   function maskIfPersonalNumber(orgNr) {
     if (!orgNr) return "Saknas";
-    const digits = orgNr.replace(/\D/g, '');
     
-    let thirdDigit = null;
-    if (digits.length === 10) {
-      thirdDigit = digits.charAt(2);
-    } else if (digits.length === 12) {
-      thirdDigit = digits.charAt(4);
+    // Behåll eventuella bokstäver för att tillåta utländska ID:n, men rensa bindestreck/mellanslag
+    let input = orgNr.replace(/[-\s]/g, '');
+    
+    // Om vi har ett 12-siffrigt nummer, extrahera de sista 10 för testet
+    if (input.length === 12) {
+      input = input.substring(2);
     }
 
-    if (thirdDigit === '0' || thirdDigit === '1') {
+    // Strikt Regex-validering: Kräver att strängen enbart innehåller siffror, 
+    // och att den tredje siffran är 0 eller 1 (personnummer-struktur).
+    if (/^\d{2}[01]\d{7}$/.test(input)) {
       return "*** MASKERAD ***";
     }
     
